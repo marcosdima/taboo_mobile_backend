@@ -105,3 +105,16 @@ class TestGameRoutes:
         # Delete game
         response = client.delete(f"/games/{game_id}")
         assert response.status_code == 204
+
+
+    def test_create_game_route_invalid_data(self, client):
+        """Test POST /games with invalid data."""
+        response = client.post("/games", json={})
+        assert response.status_code == 400
+
+
+    def test_create_game_route_nonexistent_creator(self, client):
+        """Test POST /games with non-existent creator."""
+        game_data = get_game_data({ User.ID: 999 })  # Non-existent user ID
+        response = client.post("/games", json=game_data)
+        assert response.status_code == 400

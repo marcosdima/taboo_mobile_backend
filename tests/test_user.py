@@ -32,6 +32,15 @@ class TestUserService:
         with pytest.raises(Exception):
             service.create_user(user_data)
 
+    
+    def test_exists_user(self, app_context, user_data):
+        """ Test user existence check. """
+        service = UserService()
+        user = service.create_user(user_data)
+        
+        assert service.user_exists(user[User.ID]) is True
+        assert service.user_exists(999) is False
+
 
 class TestUserRoutes:
     """Tests for user API routes."""

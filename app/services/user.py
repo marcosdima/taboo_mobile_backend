@@ -47,3 +47,7 @@ class UserService:
         if user:
             db.session.delete(user)
             db.session.commit()
+
+    
+    def user_exists(self, id):
+        return User.query.filter_by(id=id).first() is not None

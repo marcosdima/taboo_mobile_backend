@@ -4,9 +4,15 @@ from datetime import datetime
 
 class GameService:
     def create_game(self, data):
+        creator_id = data.get(Game.CREATOR)
+
+        if not creator_id:
+            raise ValueError("Creator ID is required")
+        
         new_game = Game(**data)
         db.session.add(new_game)
         db.session.commit()
+        
         return new_game.to_dict()
 
 
@@ -30,3 +36,8 @@ class GameService:
             db.session.commit()
             return True
         return False
+    
+
+    def get_all(self):
+        games = Game.query.all()
+        return [game.to_dict() for game in games]
