@@ -1,6 +1,7 @@
-from app.models import Game
+from app.models import Game, Plays
 from app.extensions import db
 from datetime import datetime
+from .plays import PlaysService
 
 class GameService:
     def create_game(self, data):
@@ -12,12 +13,20 @@ class GameService:
         new_game = Game(**data)
         db.session.add(new_game)
         db.session.commit()
+
+        # If game was created successfully, add the creator as a player in the game.
+        plays_service = PlaysService()
+        plays_service.add_play({
+            Plays.USER_ID: creator_id,
+            Plays.GAME_ID: new_game.id
+        })
         
         return new_game.to_dict()
 
 
     def update_game(self, game_id, data):
         game = Game.query.get(game_id)
+
         if not game:
             return None
         for key, value in data.items():
@@ -25,6 +34,7 @@ class GameService:
             if key in ['ended_at', 'started_at'] and isinstance(value, str):
                 value = datetime.fromisoformat(value)
             setattr(game, key, value)
+            
         db.session.commit()
         return game.to_dict()
 

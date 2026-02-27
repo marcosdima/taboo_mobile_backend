@@ -1,7 +1,7 @@
 from flask import Flask
 from app.extensions import db, migrate
 from app.routes import main_bp
-from app.models import User, Game # Migration.
+from app.models import User, Game, Plays # Migration.
 import os
 
 
