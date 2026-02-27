@@ -1,19 +1,27 @@
 from flask import Flask
-from flask_cors import CORS
-from app.config import Config
 from app.extensions import db, migrate
 from app.routes import main_bp
+from app.models import User, Game # Migration.
+import os
 
-def create_app(config_class=Config):
+
+def create_app(test_config=None):
     app = Flask(__name__)
-    app.config.from_object(config_class)
 
-    # Initialize extensions.
+    db_uri = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+
+    # Fix Render postgres URL
+    if db_uri.startswith("postgres://"):
+        db_uri = db_uri.replace("postgres://", "postgresql://", 1)
+
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    if test_config:
+        app.config.update(test_config)
+
     db.init_app(app)
     migrate.init_app(app, db)
-    CORS(app)
-
-    # Register the main blueprint.
     app.register_blueprint(main_bp)
 
     return app
