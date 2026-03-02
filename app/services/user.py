@@ -1,5 +1,7 @@
 from app.extensions import db
 from app.models import User
+from itsdangerous import URLSafeTimedSerializer
+from flask import current_app
 
 
 class UserService:
@@ -51,3 +53,19 @@ class UserService:
     
     def user_exists(self, id):
         return User.query.filter_by(id=id).first() is not None
+
+
+    def authenticate_user(self, alias, password):
+        if not alias or not password:
+            return None
+
+        user = User.query.filter_by(alias=alias).first()
+        if not user or not user.check_password(password):
+            return None
+
+        return user
+
+
+    def generate_token(self, user):
+        serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        return serializer.dumps({"user_id": user.id, "alias": user.alias})

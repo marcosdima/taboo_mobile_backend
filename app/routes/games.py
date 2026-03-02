@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify
 from app.services import GameService, UserService
 
 
-
 game_bp = Blueprint('game', __name__)
 service = GameService()
 

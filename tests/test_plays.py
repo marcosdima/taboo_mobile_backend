@@ -144,19 +144,43 @@ class TestPlaysService:
         assert all(p[Plays.GAME_ID] == game[Game.ID] for p in plays)
 
     
-    def test_get_plays_by_user(self, app_context):
-        """Test getting all games where a user plays."""
+    def test_get_current_play_with_active_game(self, app_context):
+        """Test getting current play when user is in an active game."""
         user = create_user("testuser", "password123")
-        game1 = create_game(user[User.ID])
-        user2 = create_user("user2", "password123")
-        game2 = create_game(user2[User.ID])
+        game = create_game(user[User.ID])
         
         service = PlaysService()
-        service.add_play({Plays.USER_ID: user[User.ID], Plays.GAME_ID: game2[Game.ID]})
+        current_play = service.get_current_play(user[User.ID])
         
-        plays = service.get_plays_by_user(user[User.ID])
-        assert len(plays) == 2
-        assert all(p[Plays.USER_ID] == user[User.ID] for p in plays)
+        assert current_play is not None
+        assert current_play[Plays.USER_ID] == user[User.ID]
+        assert current_play[Plays.GAME_ID] == game[Game.ID]
+    
+    
+    def test_get_current_play_with_ended_game(self, app_context):
+        """Test that get_current_play returns None when game has ended."""
+        from datetime import datetime
+        user = create_user("testuser", "password123")
+        game = create_game(user[User.ID])
+        
+        # End the game
+        game_service = GameService()
+        game_service.update_game(game[Game.ID], {Game.ENDED_AT: datetime.now().isoformat()})
+        
+        service = PlaysService()
+        current_play = service.get_current_play(user[User.ID])
+        
+        assert current_play is None
+    
+    
+    def test_get_current_play_no_plays(self, app_context):
+        """Test getting current play when user has no plays."""
+        user = create_user("testuser", "password123")
+        
+        service = PlaysService()
+        current_play = service.get_current_play(user[User.ID])
+        
+        assert current_play is None
 
     
     def test_get_all_plays(self, app_context):
@@ -171,13 +195,71 @@ class TestPlaysService:
         
         plays = service.get_all_plays()
         assert len(plays) == 3
+    
+    
+    def test_delete_current_plays_success(self, app_context):
+        """Test deleting current play with active game."""
+        user = create_user("testuser", "password123")
+        game = create_game(user[User.ID])
+        
+        service = PlaysService()
+        result = service.delete_current_plays(user[User.ID])
+        
+        assert result is True
+        assert service.get_current_play(user[User.ID]) is None
+    
+    
+    def test_delete_current_plays_no_active_game(self, app_context):
+        """Test deleting current play when user has no active game."""
+        from datetime import datetime
+        user = create_user("testuser", "password123")
+        game = create_game(user[User.ID])
+        
+        # End the game
+        game_service = GameService()
+        game_service.update_game(game[Game.ID], {Game.ENDED_AT: datetime.now().isoformat()})
+        
+        service = PlaysService()
+        result = service.delete_current_plays(user[User.ID])
+        
+        assert result is False
+    
+    
+    def test_is_playing_with_active_game(self, app_context):
+        """Test is_playing returns True when user is in active game."""
+        user = create_user("testuser", "password123")
+        game = create_game(user[User.ID])
+        
+        service = PlaysService()
+        assert service.is_playing(user[User.ID]) is True
+    
+    
+    def test_is_playing_with_ended_game(self, app_context):
+        from datetime import datetime
+        user = create_user("testuser", "password123")
+        game = create_game(user[User.ID])
+        
+        # End the game
+        game_service = GameService()
+        game_service.end_game(game[Game.ID])
+        
+        service = PlaysService()
+        assert service.is_playing(user[User.ID]) is False
+    
+    
+    def test_is_playing_no_plays(self, app_context):
+        """Test is_playing returns False when user has no plays."""
+        user = create_user("testuser", "password123")
+        
+        service = PlaysService()
+        assert service.is_playing(user[User.ID]) is False
 
 
 class TestPlaysRoutes:
     """Tests for plays API routes."""
     
     def test_add_play_route_success(self, client):
-        """Test POST /plays endpoint success."""
+        """Test POST /play endpoint success."""
         # Create users and game
         user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
         user1_data = user1_response.get_json()
@@ -189,7 +271,7 @@ class TestPlaysRoutes:
         game_data = game_response.get_json()
         
         # Add user2 to game (user1 already added as creator)
-        response = client.post("/plays", json={
+        response = client.post("/play", json={
             Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
         })
@@ -198,8 +280,26 @@ class TestPlaysRoutes:
         assert response.get_json()[Plays.USER_ID] == user2_data[User.ID]
 
     
+    def test_add_play_route_when_already_playing(self, client):
+        """Test POST /play when user is already playing in an active game."""
+        # Create users and game
+        user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
+        user1_data = user1_response.get_json()
+        
+        game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
+        game_data = game_response.get_json()
+        
+        # Try to add user1 to the same game (already playing)
+        response = client.post("/play", json={
+            Plays.USER_ID: user1_data[User.ID],
+            Plays.GAME_ID: game_data[Game.ID]
+        })
+        
+        assert response.status_code == 400
+
+
     def test_add_play_route_duplicate(self, client):
-        """Test POST /plays with duplicate play."""
+        """Test POST /play with duplicate play."""
         # Create users and game
         user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
         user1_data = user1_response.get_json()
@@ -211,13 +311,13 @@ class TestPlaysRoutes:
         game_data = game_response.get_json()
         
         # Add user2 to game
-        client.post("/plays", json={
+        client.post("/play", json={
             Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
         })
         
         # Try to add user2 again
-        response = client.post("/plays", json={
+        response = client.post("/play", json={
             Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
         })
@@ -226,7 +326,7 @@ class TestPlaysRoutes:
 
     
     def test_delete_play_route_success(self, client):
-        """Test DELETE /plays/<user_id>/<game_id> endpoint success."""
+        """Test DELETE /leave endpoint success."""
         # Create users and game
         user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
         user1_data = user1_response.get_json()
@@ -238,20 +338,22 @@ class TestPlaysRoutes:
         game_data = game_response.get_json()
         
         # Add user2 to game
-        client.post("/plays", json={
+        client.post("/play", json={
             Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
         })
         
-        # Delete user2's play
-        response = client.delete(f"/plays/{user2_data[User.ID]}/{game_data[Game.ID]}")
+        # Delete user2's current play
+        response = client.delete("/leave", json={Plays.USER_ID: user2_data[User.ID]})
         assert response.status_code == 204
-
+    
     
     def test_delete_play_route_not_found(self, client):
-        """Test DELETE /plays with non-existent play."""
-        response = client.delete("/plays/999/999")
-        assert response.status_code == 404
+        """Test DELETE /leave with non-existent active play."""
+        user_response = client.post("/users", json={"alias": "user1", "password": "password123"})
+        user_data = user_response.get_json()
+        
+        response = client.delete("/leave", json={Plays.USER_ID: user_data[User.ID]})
 
     
     def test_get_plays_by_game_route(self, client):
@@ -267,7 +369,7 @@ class TestPlaysRoutes:
         game_data = game_response.get_json()
         
         # Add user2 to game (user1 already added as creator)
-        client.post("/plays", json={Plays.USER_ID: user2_data[User.ID], Plays.GAME_ID: game_data[Game.ID]})
+        client.post("/play", json={Plays.USER_ID: user2_data[User.ID], Plays.GAME_ID: game_data[Game.ID]})
         
         # Get plays for game
         response = client.get(f"/plays/game/{game_data[Game.ID]}")
@@ -277,28 +379,29 @@ class TestPlaysRoutes:
 
     
     def test_get_plays_by_user_route(self, client):
-        """Test GET /plays/user/<user_id> endpoint."""
-        # Create users and games (automatically added as creators)
+        """Test GET /plays/user/<user_id> endpoint returns current active play."""
+        # Create users and game
         user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
         user1_data = user1_response.get_json()
         
-        user2_response = client.post("/users", json={"alias": "user2", "password": "password123"})
-        user2_data = user2_response.get_json()
+        game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
+        game_data = game_response.get_json()
         
-        game1_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
-        game1_data = game1_response.get_json()
-        
-        game2_response = client.post("/games", json={Game.CREATOR: user2_data[User.ID]})
-        game2_data = game2_response.get_json()
-        
-        # User1 plays in game2 (already in game1 as creator)
-        client.post("/plays", json={Plays.USER_ID: user1_data[User.ID], Plays.GAME_ID: game2_data[Game.ID]})
-        
-        # Get plays for user1
+        # Get current play for user1
         response = client.get(f"/plays/user/{user1_data[User.ID]}")
         assert response.status_code == 200
-        plays = response.get_json()
-        assert len(plays) == 2
+        play = response.get_json()
+        assert play[Plays.USER_ID] == user1_data[User.ID]
+        assert play[Plays.GAME_ID] == game_data[Game.ID]
+    
+    
+    def test_get_plays_by_user_route_no_active_game(self, client):
+        """Test GET /plays/user/<user_id> returns 404 when no active game."""
+        user_response = client.post("/users", json={"alias": "user1", "password": "password123"})
+        user_data = user_response.get_json()
+        
+        response = client.get(f"/plays/user/{user_data[User.ID]}")
+        assert response.status_code == 404
 
     
     def test_get_all_plays_route(self, client):
@@ -314,10 +417,11 @@ class TestPlaysRoutes:
         game_data = game_response.get_json()
         
         # Add user2 to game (user1 already added as creator)
-        client.post("/plays", json={Plays.USER_ID: user2_data[User.ID], Plays.GAME_ID: game_data[Game.ID]})
+        client.post("/play", json={Plays.USER_ID: user2_data[User.ID], Plays.GAME_ID: game_data[Game.ID]})
         
         # Get all plays
         response = client.get("/plays")
         assert response.status_code == 200
         plays = response.get_json()
+        
         assert len(plays) == 2

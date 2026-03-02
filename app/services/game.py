@@ -51,3 +51,7 @@ class GameService:
     def get_all(self):
         games = Game.query.all()
         return [game.to_dict() for game in games]
+    
+
+    def end_game(self, game_id):
+        return self.update_game(game_id, {Game.ENDED_AT: datetime.now()})
