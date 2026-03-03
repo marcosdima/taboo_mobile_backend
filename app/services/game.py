@@ -53,5 +53,10 @@ class GameService:
         return [game.to_dict() for game in games]
     
 
+    def get_active_games(self):
+        games = Game.query.filter_by(ended_at=None).all()
+        return [game.to_dict() for game in games]
+
+
     def end_game(self, game_id):
         return self.update_game(game_id, {Game.ENDED_AT: datetime.now()})

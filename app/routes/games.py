@@ -40,3 +40,9 @@ def delete_game(game_id):
 def get_games():
     games = service.get_all()
     return jsonify(games), 200
+
+@game_bp.route('/games/active', methods=['GET'])
+@token_required
+def get_active_games():
+    games = service.get_active_games()
+    return jsonify(games), 200
