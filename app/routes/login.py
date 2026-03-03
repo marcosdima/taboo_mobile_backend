@@ -21,3 +21,30 @@ def login():
 		"token": token,
 		"user": user.to_dict()
 	}), 200
+
+
+@login_bp.route('/validate', methods=['POST'])
+def validate_token():
+	auth_header = request.headers.get("Authorization", "")
+
+	token = ""
+	if auth_header.startswith("Bearer "):
+		token = auth_header.split(" ", 1)[1].strip()
+
+	if not token:
+		return jsonify({"error": "Token is missing or invalid"}), 401
+
+	validation = service.validate_token(token)
+	status = validation.get("status", "invalid")
+
+	if status == "valid":
+		user = validation.get("user")
+		return jsonify({
+			"token": token,
+			"user": user.to_dict()
+		}), 200
+
+	if status == "expired":
+		return jsonify({"error": "Token has expired"}), 401
+
+	return jsonify({"error": "Token is missing or invalid"}), 401

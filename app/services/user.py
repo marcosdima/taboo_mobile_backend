@@ -73,15 +73,26 @@ class UserService:
 
 
     def get_user_from_token(self, token, max_age=86400):
+        validation = self.validate_token(token, max_age=max_age)
+        return validation.get("user") if validation.get("valid") else None
+
+
+    def validate_token(self, token, max_age=86400):
         serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
 
         try:
             payload = serializer.loads(token, max_age=max_age)
-        except (BadSignature, SignatureExpired):
-            return None
+        except SignatureExpired:
+            return {"valid": False, "status": "expired", "user": None}
+        except BadSignature:
+            return {"valid": False, "status": "invalid", "user": None}
 
         user_id = payload.get("user_id")
         if not user_id:
-            return None
+            return {"valid": False, "status": "invalid", "user": None}
 
-        return User.query.get(user_id)
+        user = User.query.get(user_id)
+        if not user:
+            return {"valid": False, "status": "invalid", "user": None}
+
+        return {"valid": True, "status": "valid", "user": user}

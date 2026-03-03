@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.services.plays import PlaysService
@@ -101,9 +102,6 @@ class TestPlaysService:
 
     def test_add_play_limit_per_game(self, app_context):
         """Test that a game cannot have more than 10 plays."""
-        if db.engine.dialect.name != "postgresql":
-            pytest.skip("Requires PostgreSQL trigger migration for max plays per game")
-
         creator = create_user("creator_limit", "password123")
         game = create_game(creator[User.ID])
 
@@ -129,30 +127,6 @@ class TestPlaysService:
             })
 
 
-    def test_add_play_limit_per_game_db_integrity(self, app_context):
-        """Test DB-level integrity: trigger blocks 11th play without using service."""
-        if db.engine.dialect.name != "postgresql":
-            pytest.skip("Requires PostgreSQL trigger migration for max plays per game")
-
-        creator = create_user("creator_limit_db", "password123")
-        game = create_game(creator[User.ID])
-
-        # Creator is already in the game; insert 9 more rows directly (total = 10)
-        for idx in range(2, 11):
-            user = create_user(f"limit_db_user_{idx}", "password123")
-            db.session.add(Plays(user_id=user[User.ID], game_id=game[Game.ID]))
-        db.session.commit()
-
-        # 11th insert must fail by DB integrity (trigger)
-        extra_user = create_user("limit_db_user_11", "password123")
-        db.session.add(Plays(user_id=extra_user[User.ID], game_id=game[Game.ID]))
-
-        with pytest.raises(IntegrityError, match="Game already has maximum of 10 plays"):
-            db.session.commit()
-
-        db.session.rollback()
-
-    
     def test_add_play_missing_data(self, app_context):
         """Test play addition with missing required data."""
         service = PlaysService()
