@@ -1,6 +1,7 @@
 from app.extensions import db
 from app.models import User
 from itsdangerous import URLSafeTimedSerializer
+from itsdangerous import BadSignature, SignatureExpired
 from flask import current_app
 
 
@@ -69,3 +70,18 @@ class UserService:
     def generate_token(self, user):
         serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
         return serializer.dumps({"user_id": user.id, "alias": user.alias})
+
+
+    def get_user_from_token(self, token, max_age=86400):
+        serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+
+        try:
+            payload = serializer.loads(token, max_age=max_age)
+        except (BadSignature, SignatureExpired):
+            return None
+
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+
+        return User.query.get(user_id)

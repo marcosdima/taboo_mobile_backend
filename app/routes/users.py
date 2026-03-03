@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.services.user import UserService
+from app.middlewares import token_required
 
 
 users_bp = Blueprint('users', __name__)
@@ -19,18 +20,21 @@ def create_user():
 
 
 @users_bp.route('/users/<int:user_id>', methods=['GET'])
+@token_required
 def get_user(user_id):
     user = service.get_user(user_id)
     return jsonify(user), 200
 
 
 @users_bp.route('/users', methods=['GET'])
+@token_required
 def get_all_users():
     users = service.get_all_users()
     return jsonify(users), 200
 
 
 @users_bp.route('/users/<int:user_id>', methods=['PUT'])
+@token_required
 def update_user(user_id):
     data = request.json
     user = service.update_user(user_id, data)
@@ -38,6 +42,7 @@ def update_user(user_id):
 
 
 @users_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@token_required
 def delete_user(user_id):
     service.delete_user(user_id)
     return jsonify({"message": "User deleted"}), 204

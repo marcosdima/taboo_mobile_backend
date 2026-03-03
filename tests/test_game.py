@@ -66,24 +66,14 @@ class TestGameRoutes:
     """Tests for game API routes."""
     def test_create_game_route_success(self, client):
         """Test POST /games endpoint success."""
-        # First create a user
-        user_response = client.post("/users", json={"alias": "testuser", "password": "password123"})
-        user_data = user_response.get_json()
-        
-        game_data = get_game_data(user_data)
-        response = client.post("/games", json=game_data)
+        response = client.post("/games", json={})
         assert response.status_code == 201
-        assert response.get_json()[Game.CREATOR] == game_data[Game.CREATOR]
+        assert response.get_json()[Game.CREATOR] is not None
     
 
     def test_update_game_route_success(self, client):
         """Test PUT /games/<id> endpoint success."""
-        # Create user and game
-        user_response = client.post("/users", json={"alias": "testuser", "password": "password123"})
-        user_data = user_response.get_json()
-        
-        game_data = get_game_data(user_data)
-        create_response = client.post("/games", json=game_data)
+        create_response = client.post("/games", json={})
         game_id = create_response.get_json()[Game.ID]
         
         # Update game
@@ -94,12 +84,7 @@ class TestGameRoutes:
 
     def test_delete_game_route_success(self, client):
         """Test DELETE /games/<id> endpoint success."""
-        # Create user and game
-        user_response = client.post("/users", json={"alias": "testuser", "password": "password123"})
-        user_data = user_response.get_json()
-        
-        game_data = get_game_data(user_data)
-        create_response = client.post("/games", json=game_data)
+        create_response = client.post("/games", json={})
         game_id = create_response.get_json()[Game.ID]
         
         # Delete game
@@ -108,13 +93,16 @@ class TestGameRoutes:
 
 
     def test_create_game_route_invalid_data(self, client):
-        """Test POST /games with invalid data."""
+        """Test POST /games with invalid data payload still uses token user."""
+        response = client.post("/games", json={})
+        assert response.status_code == 201
+
+
+    def test_create_game_route_rejects_active_game(self, client):
+        """Test POST /games when authenticated user already has an active game."""
+        first_response = client.post("/games", json={})
+        assert first_response.status_code == 201
+
         response = client.post("/games", json={})
         assert response.status_code == 400
-
-
-    def test_create_game_route_nonexistent_creator(self, client):
-        """Test POST /games with non-existent creator."""
-        game_data = get_game_data({ User.ID: 999 })  # Non-existent user ID
-        response = client.post("/games", json=game_data)
-        assert response.status_code == 400
+        assert response.get_json()["error"] == "Creator already has an active game"

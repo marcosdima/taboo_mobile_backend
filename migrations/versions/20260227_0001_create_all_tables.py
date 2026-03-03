@@ -22,7 +22,7 @@ def upgrade():
         "users",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
         sa.Column("alias", sa.String(length=50), nullable=False, unique=True),
-        sa.Column("password_hash", sa.String(length=128), nullable=False),
+        sa.Column("password_hash", sa.String(length=255), nullable=False),
     )
 
     # Create games table

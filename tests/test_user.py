@@ -15,6 +15,10 @@ def user_data():
 
 class TestUserService:
     """Tests for UserService class."""
+    def test_password_hash_column_length(self):
+        """Ensure password_hash column is large enough for modern hash strings."""
+        assert User.__table__.c.password_hash.type.length == 255
+
     def test_create_user_success(self, app_context, user_data):
         """ Test successful user creation. """
         service = UserService()
@@ -60,13 +64,13 @@ class TestUserRoutes:
         """Test GET /users endpoint."""
         response = client.get("/users")
 
-        # User does not exist yet, so we expect an empty list.
+        # Auth fixture creates one user for obtaining a token.
         assert response.status_code == 200
-        assert response.get_json() == []
+        assert len(response.get_json()) == 1
         
         # Create a user and test again.
         client.post("/users", json=user_data)
         response = client.get("/users")
         assert response.status_code == 200
-        assert len(response.get_json()) == 1
+        assert len(response.get_json()) == 2
         
