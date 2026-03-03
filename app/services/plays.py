@@ -54,6 +54,16 @@ class PlaysService:
         play = Plays.query.filter_by(user_id=user_id, game_id=game_id).first()
         if play:
             db.session.delete(play)
+            
+            # Check if there are players left.
+            remaining_plays = Plays.query.filter_by(game_id=game_id).count()
+            if remaining_plays == 0:
+                # If no players left, end the game.
+                game = db.session.get(Game, game_id)
+                if game:
+                    game.ended_at = db.func.now()
+                    db.session.add(game)
+
             db.session.commit()
             return True
         return False
