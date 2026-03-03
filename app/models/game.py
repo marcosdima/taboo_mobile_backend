@@ -6,6 +6,7 @@ from app.extensions import db
 class Game(db.Model):
     __tablename__ = 'games'
 
+    MAX_PLAYS_PER_GAME = 10
 
     ID = 'id'
     STARTED_AT = 'started_at'

@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
+from app.extensions import db
 from app.services.plays import PlaysService
 from app.services.game import GameService
 from app.services.user import UserService
@@ -96,6 +97,60 @@ class TestPlaysService:
                 Plays.USER_ID: user2[User.ID],
                 Plays.GAME_ID: game[Game.ID]
             })
+
+
+    def test_add_play_limit_per_game(self, app_context):
+        """Test that a game cannot have more than 10 plays."""
+        if db.engine.dialect.name != "postgresql":
+            pytest.skip("Requires PostgreSQL trigger migration for max plays per game")
+
+        creator = create_user("creator_limit", "password123")
+        game = create_game(creator[User.ID])
+
+        service = PlaysService()
+
+        # Creator is already in the game. Add 9 more users (total should become 10).
+        for idx in range(2, 11):
+            user = create_user(f"limit_user_{idx}", "password123")
+            service.add_play({
+                Plays.USER_ID: user[User.ID],
+                Plays.GAME_ID: game[Game.ID]
+            })
+
+        plays = service.get_plays_by_game(game[Game.ID])
+        assert len(plays) == 10
+
+        # The 11th player must fail.
+        extra_user = create_user("limit_user_11", "password123")
+        with pytest.raises(ValueError, match="Game already has maximum of 10 plays"):
+            service.add_play({
+                Plays.USER_ID: extra_user[User.ID],
+                Plays.GAME_ID: game[Game.ID]
+            })
+
+
+    def test_add_play_limit_per_game_db_integrity(self, app_context):
+        """Test DB-level integrity: trigger blocks 11th play without using service."""
+        if db.engine.dialect.name != "postgresql":
+            pytest.skip("Requires PostgreSQL trigger migration for max plays per game")
+
+        creator = create_user("creator_limit_db", "password123")
+        game = create_game(creator[User.ID])
+
+        # Creator is already in the game; insert 9 more rows directly (total = 10)
+        for idx in range(2, 11):
+            user = create_user(f"limit_db_user_{idx}", "password123")
+            db.session.add(Plays(user_id=user[User.ID], game_id=game[Game.ID]))
+        db.session.commit()
+
+        # 11th insert must fail by DB integrity (trigger)
+        extra_user = create_user("limit_db_user_11", "password123")
+        db.session.add(Plays(user_id=extra_user[User.ID], game_id=game[Game.ID]))
+
+        with pytest.raises(IntegrityError, match="Game already has maximum of 10 plays"):
+            db.session.commit()
+
+        db.session.rollback()
 
     
     def test_add_play_missing_data(self, app_context):
@@ -282,16 +337,14 @@ class TestPlaysRoutes:
     
     def test_add_play_route_when_already_playing(self, client):
         """Test POST /play when user is already playing in an active game."""
-        # Create users and game
-        user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
-        user1_data = user1_response.get_json()
-        
-        game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
+        # Create game with authenticated fixture user as creator
+        game_response = client.post("/games", json={})
         game_data = game_response.get_json()
+        creator_id = game_data[Game.CREATOR]
         
-        # Try to add user1 to the same game (already playing)
+        # Try to add creator to the same game (already playing)
         response = client.post("/play", json={
-            Plays.USER_ID: user1_data[User.ID],
+            Plays.USER_ID: creator_id,
             Plays.GAME_ID: game_data[Game.ID]
         })
         
@@ -323,6 +376,38 @@ class TestPlaysRoutes:
         })
         
         assert response.status_code == 400
+
+
+    def test_add_play_route_limit_per_game(self, client):
+        """Test POST /play returns 400 when game already has 10 plays."""
+        creator_response = client.post("/users", json={"alias": "route_creator_limit", "password": "password123"})
+        creator_data = creator_response.get_json()
+
+        game_response = client.post("/games", json={Game.CREATOR: creator_data[User.ID]})
+        game_data = game_response.get_json()
+
+        # Add 9 users successfully (creator is already the 1st play)
+        for idx in range(2, 11):
+            user_response = client.post("/users", json={"alias": f"route_limit_user_{idx}", "password": "password123"})
+            user_data = user_response.get_json()
+
+            add_response = client.post("/play", json={
+                Plays.USER_ID: user_data[User.ID],
+                Plays.GAME_ID: game_data[Game.ID]
+            })
+            assert add_response.status_code == 201
+
+        # 11th play should be rejected
+        extra_user_response = client.post("/users", json={"alias": "route_limit_user_11", "password": "password123"})
+        extra_user_data = extra_user_response.get_json()
+
+        response = client.post("/play", json={
+            Plays.USER_ID: extra_user_data[User.ID],
+            Plays.GAME_ID: game_data[Game.ID]
+        })
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "Game already has maximum of 10 plays"
 
     
     def test_delete_play_route_success(self, client):
@@ -380,18 +465,16 @@ class TestPlaysRoutes:
     
     def test_get_plays_by_user_route(self, client):
         """Test GET /plays/user/<user_id> endpoint returns current active play."""
-        # Create users and game
-        user1_response = client.post("/users", json={"alias": "user1", "password": "password123"})
-        user1_data = user1_response.get_json()
-        
-        game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
+        # Create game with authenticated fixture user as creator
+        game_response = client.post("/games", json={})
         game_data = game_response.get_json()
+        creator_id = game_data[Game.CREATOR]
         
-        # Get current play for user1
-        response = client.get(f"/plays/user/{user1_data[User.ID]}")
+        # Get current play for actual creator user
+        response = client.get(f"/plays/user/{creator_id}")
         assert response.status_code == 200
         play = response.get_json()
-        assert play[Plays.USER_ID] == user1_data[User.ID]
+        assert play[Plays.USER_ID] == creator_id
         assert play[Plays.GAME_ID] == game_data[Game.ID]
     
     

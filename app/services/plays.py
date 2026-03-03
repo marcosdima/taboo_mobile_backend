@@ -1,5 +1,6 @@
 from app.extensions import db
 from app.models import Plays, Game
+from sqlalchemy.exc import IntegrityError
 
 
 class PlaysService:
@@ -10,18 +11,40 @@ class PlaysService:
 
         if not user_id or not game_id:
             raise ValueError("User ID and Game ID are required")
+        
+        # Check if game exists and is active.
+        game = db.session.get(Game, game_id)
+        if not game or game.ended_at is not None:
+            raise ValueError("Game does not exist or is not active")
 
         # Check if play already exists
         existing_play = Plays.query.filter_by(user_id=user_id, game_id=game_id).first()
         if existing_play:
             raise ValueError("User already playing in this game")
-        
-        # Check if game exists and is active.
-        game = Game.query.get(game_id)
 
+        # Enforce max number of plays per game
+        total_plays = Plays.query.filter_by(game_id=game_id).count()
+        if total_plays >= Game.MAX_PLAYS_PER_GAME:
+            raise ValueError(f"Game already has maximum of {Game.MAX_PLAYS_PER_GAME} plays")
+        
         play = Plays(user_id=user_id, game_id=game_id)
         db.session.add(play)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError as exc:
+            db.session.rollback()
+            details = str(getattr(exc, "orig", exc))
+
+            if "Game already has maximum of 10 plays" in details:
+                raise ValueError("Game already has maximum of 10 plays")
+
+            if (
+                "unique_user_game" in details
+                or "UNIQUE constraint failed: plays.user_id, plays.game_id" in details
+            ):
+                raise ValueError("User already playing in this game")
+
+            raise
 
         return play.to_dict()
 
