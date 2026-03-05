@@ -2,6 +2,7 @@ from app.models import Game, Plays
 from app.extensions import db
 from datetime import datetime
 from .plays import PlaysService
+from .groups import GroupsService
 
 class GameService:
     def create_game(self, data):
@@ -20,6 +21,9 @@ class GameService:
             Plays.USER_ID: creator_id,
             Plays.GAME_ID: new_game.id
         })
+
+        groups_service = GroupsService()
+        groups_service.create_default_groups(new_game.id)
         
         return new_game.to_dict()
 

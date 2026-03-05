@@ -17,7 +17,10 @@ class Plays(db.Model):
     game_id = Column(Integer, ForeignKey('games.id'), nullable=False)
 
 
-    __table_args__ = (UniqueConstraint('user_id', 'game_id', name='unique_user_game'),)
+    __table_args__ = (
+        UniqueConstraint('user_id', 'game_id', name='unique_user_game'),
+        UniqueConstraint('id', 'game_id', name='unique_play_id_game'),
+    )
 
 
     def to_dict(self):
