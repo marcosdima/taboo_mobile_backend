@@ -48,7 +48,6 @@ class TestGroupAssignmentsRoutes:
         assert response.status_code == 201
         payload = response.get_json()
         assert payload["group_id"] == group.id
-        assert payload["game_id"] == game_id
         assert payload["play_id"] is not None
 
         target_play = Plays.query.filter_by(user_id=target_user["id"], game_id=game_id).first()

@@ -41,14 +41,13 @@ class TestMemberModel:
         play = create_play(user.id, game.id)
         group = create_group(game.id, "Team A")
 
-        member = Member(play_id=play.id, group_id=group.id, game_id=game.id)
+        member = Member(play_id=play.id, group_id=group.id)
         db.session.add(member)
         db.session.commit()
 
         assert member.id is not None
         assert member.play_id == play.id
         assert member.group_id == group.id
-        assert member.game_id == game.id
 
     def test_play_can_only_belong_to_one_member(self, app_context):
         user1 = create_user("member_user_1")
@@ -61,11 +60,11 @@ class TestMemberModel:
         group1 = create_group(game.id, "Team 1")
         group2 = create_group(game.id, "Team 2")
 
-        member1 = Member(play_id=play1.id, group_id=group1.id, game_id=game.id)
+        member1 = Member(play_id=play1.id, group_id=group1.id)
         db.session.add(member1)
         db.session.commit()
 
-        duplicated_member = Member(play_id=play1.id, group_id=group2.id, game_id=game.id)
+        duplicated_member = Member(play_id=play1.id, group_id=group2.id)
         db.session.add(duplicated_member)
 
         with pytest.raises(IntegrityError):
@@ -83,5 +82,5 @@ class TestMemberModel:
         play = create_play(user.id, game1.id)
         group = create_group(game2.id, "Foreign Team")
 
-        with pytest.raises(ValueError, match="Member.game_id must match Group.game_id"):
-            Member(play_id=play.id, group_id=group.id, game_id=game1.id)
+        with pytest.raises(ValueError, match="Plays.game_id must match Group.game_id"):
+            Member(play_id=play.id, group_id=group.id)

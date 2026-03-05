@@ -45,11 +45,11 @@ class GroupsService:
         if not target_play:
             raise ValueError("User must be playing in this game")
 
-        existing_member = Member.query.filter_by(play_id=target_play.id, game_id=group.game_id).first()
+        existing_member = Member.query.filter_by(play_id=target_play.id).first()
         if existing_member:
             raise ValueError("User already assigned in this game. Use PUT to update")
 
-        member = Member(play_id=target_play.id, group_id=group.id, game_id=group.game_id)
+        member = Member(play_id=target_play.id, group_id=group.id)
         db.session.add(member)
         db.session.commit()
 
@@ -75,7 +75,7 @@ class GroupsService:
         if not target_play:
             raise ValueError("User must be playing in this game")
 
-        member = Member.query.filter_by(play_id=target_play.id, game_id=group.game_id).first()
+        member = Member.query.filter_by(play_id=target_play.id).first()
         if not member:
             raise LookupError("User has no group assignment in this game")
 
