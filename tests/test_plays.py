@@ -413,6 +413,8 @@ class TestPlaysRoutes:
         user_data = user_response.get_json()
         
         response = client.delete("/leave", json={Plays.USER_ID: user_data[User.ID]})
+        assert response.status_code == 404
+        assert response.get_json()["error"] == "Play not found"
 
     
     def test_get_plays_by_game_route(self, client):

@@ -15,7 +15,7 @@ class TestWordModel:
         db.session.add(word)
         db.session.commit()
 
-        assert word.id == 1
+        assert word.id is not None
         data = word.to_dict()
         assert data[Word.LANG] == "ES"
         assert data[Word.CONTENT] == "casa"

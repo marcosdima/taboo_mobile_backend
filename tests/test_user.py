@@ -33,7 +33,7 @@ class TestUserService:
         """ Test user creation with duplicate alias. """
         service = UserService()
         service.create_user(user_data)
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="Alias already exists"):
             service.create_user(user_data)
 
     
@@ -52,12 +52,16 @@ class TestUserRoutes:
         """Test POST /users endpoint success."""
         response = client.post("/users", json=user_data)
         assert response.status_code == 201
+        payload = response.get_json()
+        assert payload["alias"] == user_data["alias"]
+        assert payload["id"] is not None
     
 
     def test_create_user_route_invalid_data(self, client):
         """Test POST /users with invalid data."""
         response = client.post("/users", json={})
         assert response.status_code == 400
+        assert response.get_json()["error"] == "Alias and password required"
     
 
     def test_get_users_route(self, client, user_data):

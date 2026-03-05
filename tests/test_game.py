@@ -1,7 +1,7 @@
 import pytest
 from app.services.game import GameService
 from app.services.user import UserService
-from app.models import Game, User
+from app.models import Game, User, Group
 from datetime import datetime
 
 
@@ -26,9 +26,12 @@ class TestGameService:
         
         assert result is not None
         assert result[Game.CREATOR] == game_data[Game.CREATOR]
-        assert result[Game.ID] == 1
+        assert result[Game.ID] is not None
         assert result[Game.STARTED_AT] is not None
         assert result[Game.ENDED_AT] is None
+
+        groups = Group.query.filter_by(game_id=result[Game.ID]).all()
+        assert sorted([group.name for group in groups]) == ["Blue", "Red"]
 
     
     def test_update_game_success(self, app_context):
@@ -68,7 +71,12 @@ class TestGameRoutes:
         """Test POST /games endpoint success."""
         response = client.post("/games", json={})
         assert response.status_code == 201
-        assert response.get_json()[Game.CREATOR] is not None
+        payload = response.get_json()
+        assert payload[Game.CREATOR] is not None
+
+        groups_response = client.get(f"/groups/{payload[Game.ID]}")
+        assert groups_response.status_code == 200
+        assert sorted([group["name"] for group in groups_response.get_json()]) == ["Blue", "Red"]
     
 
     def test_update_game_route_success(self, client):
