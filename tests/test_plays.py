@@ -286,6 +286,12 @@ class TestPlaysService:
 
 class TestPlaysRoutes:
     """Tests for plays API routes."""
+
+    @staticmethod
+    def _auth_headers_for(client, alias, password="password123"):
+        login_response = client.post("/login", json={"alias": alias, "password": password})
+        token = login_response.get_json()["token"]
+        return {"Authorization": f"Bearer {token}"}
     
     def test_add_play_route_success(self, client):
         """Test POST /play endpoint success."""
@@ -298,12 +304,13 @@ class TestPlaysRoutes:
         
         game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
         game_data = game_response.get_json()
+
+        user2_headers = self._auth_headers_for(client, "user2")
         
-        # Add user2 to game (user1 already added as creator)
+        # Add current authenticated user (user2) to game
         response = client.post("/play", json={
-            Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
-        })
+        }, headers=user2_headers)
         
         assert response.status_code == 201
         assert response.get_json()[Plays.USER_ID] == user2_data[User.ID]
@@ -318,7 +325,6 @@ class TestPlaysRoutes:
         
         # Try to add creator to the same game (already playing)
         response = client.post("/play", json={
-            Plays.USER_ID: creator_id,
             Plays.GAME_ID: game_data[Game.ID]
         })
         
@@ -336,18 +342,18 @@ class TestPlaysRoutes:
         
         game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
         game_data = game_response.get_json()
+
+        user2_headers = self._auth_headers_for(client, "user2")
         
         # Add user2 to game
         client.post("/play", json={
-            Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
-        })
+        }, headers=user2_headers)
         
         # Try to add user2 again
         response = client.post("/play", json={
-            Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
-        })
+        }, headers=user2_headers)
         
         assert response.status_code == 400
 
@@ -364,21 +370,21 @@ class TestPlaysRoutes:
         for idx in range(2, 11):
             user_response = client.post("/users", json={"alias": f"route_limit_user_{idx}", "password": "password123"})
             user_data = user_response.get_json()
+            user_headers = self._auth_headers_for(client, user_data[User.ALIAS])
 
             add_response = client.post("/play", json={
-                Plays.USER_ID: user_data[User.ID],
                 Plays.GAME_ID: game_data[Game.ID]
-            })
+            }, headers=user_headers)
             assert add_response.status_code == 201
 
         # 11th play should be rejected
         extra_user_response = client.post("/users", json={"alias": "route_limit_user_11", "password": "password123"})
         extra_user_data = extra_user_response.get_json()
+        extra_user_headers = self._auth_headers_for(client, extra_user_data[User.ALIAS])
 
         response = client.post("/play", json={
-            Plays.USER_ID: extra_user_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
-        })
+        }, headers=extra_user_headers)
 
         assert response.status_code == 400
         assert response.get_json()["error"] == "Game already has maximum of 10 plays"
@@ -395,24 +401,25 @@ class TestPlaysRoutes:
         
         game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
         game_data = game_response.get_json()
+
+        user2_headers = self._auth_headers_for(client, "user2")
         
         # Add user2 to game
         client.post("/play", json={
-            Plays.USER_ID: user2_data[User.ID],
             Plays.GAME_ID: game_data[Game.ID]
-        })
+        }, headers=user2_headers)
         
-        # Delete user2's current play
-        response = client.delete("/leave", json={Plays.USER_ID: user2_data[User.ID]})
+        # Delete current play (user2)
+        response = client.delete("/leave", headers=user2_headers)
         assert response.status_code == 204
     
     
     def test_delete_play_route_not_found(self, client):
         """Test DELETE /leave with non-existent active play."""
-        user_response = client.post("/users", json={"alias": "user1", "password": "password123"})
-        user_data = user_response.get_json()
+        client.post("/users", json={"alias": "user1", "password": "password123"})
+        user_headers = self._auth_headers_for(client, "user1")
         
-        response = client.delete("/leave", json={Plays.USER_ID: user_data[User.ID]})
+        response = client.delete("/leave", headers=user_headers)
         assert response.status_code == 404
         assert response.get_json()["error"] == "Play not found"
 
@@ -428,9 +435,11 @@ class TestPlaysRoutes:
         
         game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
         game_data = game_response.get_json()
+
+        user2_headers = self._auth_headers_for(client, "user2")
         
         # Add user2 to game (user1 already added as creator)
-        client.post("/play", json={Plays.USER_ID: user2_data[User.ID], Plays.GAME_ID: game_data[Game.ID]})
+        client.post("/play", json={Plays.GAME_ID: game_data[Game.ID]}, headers=user2_headers)
         
         # Get plays for game
         response = client.get(f"/plays/game/{game_data[Game.ID]}")
@@ -440,14 +449,14 @@ class TestPlaysRoutes:
 
     
     def test_get_plays_by_user_route(self, client):
-        """Test GET /plays/user/<user_id> endpoint returns current active play."""
+        """Test GET /plays/user endpoint returns current active play for authenticated user."""
         # Create game with authenticated fixture user as creator
         game_response = client.post("/games", json={})
         game_data = game_response.get_json()
         creator_id = game_data[Game.CREATOR]
         
         # Get current play for actual creator user
-        response = client.get(f"/plays/user/{creator_id}")
+        response = client.get("/plays/user")
         assert response.status_code == 200
         play = response.get_json()
         assert play[Plays.USER_ID] == creator_id
@@ -455,11 +464,11 @@ class TestPlaysRoutes:
     
     
     def test_get_plays_by_user_route_no_active_game(self, client):
-        """Test GET /plays/user/<user_id> returns 404 when no active game."""
-        user_response = client.post("/users", json={"alias": "user1", "password": "password123"})
-        user_data = user_response.get_json()
+        """Test GET /plays/user returns 404 when authenticated user has no active game."""
+        client.post("/users", json={"alias": "user1", "password": "password123"})
+        user_headers = self._auth_headers_for(client, "user1")
         
-        response = client.get(f"/plays/user/{user_data[User.ID]}")
+        response = client.get("/plays/user", headers=user_headers)
         assert response.status_code == 404
 
     
@@ -474,9 +483,11 @@ class TestPlaysRoutes:
         
         game_response = client.post("/games", json={Game.CREATOR: user1_data[User.ID]})
         game_data = game_response.get_json()
+
+        user2_headers = self._auth_headers_for(client, "user2")
         
         # Add user2 to game (user1 already added as creator)
-        client.post("/play", json={Plays.USER_ID: user2_data[User.ID], Plays.GAME_ID: game_data[Game.ID]})
+        client.post("/play", json={Plays.GAME_ID: game_data[Game.ID]}, headers=user2_headers)
         
         # Get all plays
         response = client.get("/plays")
