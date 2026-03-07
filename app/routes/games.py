@@ -48,3 +48,25 @@ def get_games():
 def get_active_games():
     games = service.get_active_games()
     return jsonify(games), 200
+
+
+@game_bp.route('/games/start', methods=['POST'])
+@token_required
+def start_game():
+    current_play = plays_service.get_current_play(g.current_user.id)
+
+    if not current_play:
+        return jsonify({"error": "User has no active game"}), 400
+
+    game = service.get_game_by_id(current_play["game_id"])
+    if not game or game["ended_at"] is not None:
+        return jsonify({"error": "Game does not exist or is not active"}), 400
+
+    if game["creator"] != g.current_user.id:
+        return jsonify({"error": "Only game creator can start the game"}), 403
+
+    try:
+        started_game = service.start_game(game["id"])
+        return jsonify(started_game), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400

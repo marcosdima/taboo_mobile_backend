@@ -152,3 +152,55 @@ class TestGameRoutes:
 
         assert response.status_code == 403
         assert response.get_json()["error"] == "Only game creator can perform this action"
+
+
+    def test_start_game_route_success(self, client):
+        create_response = client.post("/games", json={})
+        game_id = create_response.get_json()[Game.ID]
+
+        client.post("/users", json={"alias": "second_player", "password": "password123"})
+        second_player_headers = self._auth_headers_for(client, "second_player")
+
+        join_response = client.post(
+            "/play",
+            json={"game_id": game_id},
+            headers=second_player_headers,
+        )
+        assert join_response.status_code == 201
+
+        response = client.post("/games/start", json={})
+
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload[Game.ID] == game_id
+        assert payload[Game.ENDED_AT] is None
+
+
+    def test_start_game_route_rejects_when_user_has_no_active_game(self, client):
+        client.post("/users", json={"alias": "no_active_game_user", "password": "password123"})
+        no_game_headers = self._auth_headers_for(client, "no_active_game_user")
+
+        response = client.post("/games/start", json={}, headers=no_game_headers)
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "User has no active game"
+
+
+    def test_start_game_route_rejects_when_user_is_not_creator(self, client):
+        create_response = client.post("/games", json={})
+        game_id = create_response.get_json()[Game.ID]
+
+        client.post("/users", json={"alias": "non_creator_player", "password": "password123"})
+        non_creator_headers = self._auth_headers_for(client, "non_creator_player")
+
+        join_response = client.post(
+            "/play",
+            json={"game_id": game_id},
+            headers=non_creator_headers,
+        )
+        assert join_response.status_code == 201
+
+        response = client.post("/games/start", json={}, headers=non_creator_headers)
+
+        assert response.status_code == 403
+        assert response.get_json()["error"] == "Only game creator can start the game"

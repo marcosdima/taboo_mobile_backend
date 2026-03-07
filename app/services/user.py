@@ -26,7 +26,7 @@ class UserService:
 
 
     def get_user(self, user_id):
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         return user.to_dict() if user else None
 
 
@@ -36,7 +36,7 @@ class UserService:
 
 
     def update_user(self, user_id, data):
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if user:
             user.alias = data.get('alias', user.alias)
             if data.get('password'):
@@ -46,7 +46,7 @@ class UserService:
 
 
     def delete_user(self, user_id):
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if user:
             db.session.delete(user)
             db.session.commit()
@@ -91,7 +91,7 @@ class UserService:
         if not user_id:
             return {"valid": False, "status": "invalid", "user": None}
 
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return {"valid": False, "status": "invalid", "user": None}
 

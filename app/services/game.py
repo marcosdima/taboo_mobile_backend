@@ -8,6 +8,11 @@ class GameService:
     MIN_PLAYERS_TO_START = 2
 
 
+    def get_game_by_id(self, game_id):
+        game = db.session.get(Game, game_id)
+        return game.to_dict() if game else None
+
+
     def create_game(self, data):
         creator_id = data.get(Game.CREATOR)
 
@@ -32,7 +37,7 @@ class GameService:
 
 
     def update_game(self, game_id, data):
-        game = Game.query.get(game_id)
+        game = db.session.get(Game, game_id)
 
         if not game:
             return None
@@ -47,7 +52,7 @@ class GameService:
 
 
     def delete_game(self, game_id):
-        game = Game.query.get(game_id)
+        game = db.session.get(Game, game_id)
         if game:
             db.session.delete(game)
             db.session.commit()
@@ -67,3 +72,18 @@ class GameService:
 
     def end_game(self, game_id):
         return self.update_game(game_id, {Game.ENDED_AT: datetime.now()})
+
+
+    def start_game(self, game_id):
+        game = db.session.get(Game, game_id)
+        if not game or game.ended_at is not None:
+            raise ValueError("Game does not exist or is not active")
+
+        # Check if the minimum player requirement is met before starting the game.
+        plays = PlaysService()
+        players_in_game = len(plays.get_plays_by_game(game_id))
+        if players_in_game < self.MIN_PLAYERS_TO_START:
+            raise ValueError(f"Cannot start game with less than {self.MIN_PLAYERS_TO_START} players")
+        
+        return self.update_game(game_id, {Game.STARTED_AT: datetime.now()})
+    

@@ -1,6 +1,7 @@
 from functools import wraps
 from flask import request, jsonify, g
 
+from app.extensions import db
 from app.models import Game
 from app.services.user import UserService
 
@@ -32,7 +33,7 @@ def creator_required(func):
         if game_id is None:
             return jsonify({"error": "game_id is required"}), 400
 
-        game = Game.query.get(game_id)
+        game = db.session.get(Game, game_id)
         if game is None:
             return jsonify({"error": "Game not found"}), 404
 
