@@ -67,6 +67,14 @@ class TestGameService:
 
 class TestGameRoutes:
     """Tests for game API routes."""
+
+    @staticmethod
+    def _auth_headers_for(client, alias, password="password123"):
+        login_response = client.post("/login", json={"alias": alias, "password": password})
+        token = login_response.get_json()["token"]
+        return {"Authorization": f"Bearer {token}"}
+
+
     def test_create_game_route_success(self, client):
         """Test POST /games endpoint success."""
         response = client.post("/games", json={})
@@ -114,3 +122,33 @@ class TestGameRoutes:
         response = client.post("/games", json={})
         assert response.status_code == 400
         assert response.get_json()["error"] == "Creator already has an active game"
+
+
+    def test_update_game_route_fails_for_non_creator(self, client):
+        create_response = client.post("/games", json={})
+        game_id = create_response.get_json()[Game.ID]
+
+        client.post("/users", json={"alias": "outsider_updater", "password": "password123"})
+        outsider_headers = self._auth_headers_for(client, "outsider_updater")
+
+        response = client.put(
+            f"/games/{game_id}",
+            json={"ended_at": datetime.now().isoformat()},
+            headers=outsider_headers,
+        )
+
+        assert response.status_code == 403
+        assert response.get_json()["error"] == "Only game creator can perform this action"
+
+
+    def test_delete_game_route_fails_for_non_creator(self, client):
+        create_response = client.post("/games", json={})
+        game_id = create_response.get_json()[Game.ID]
+
+        client.post("/users", json={"alias": "outsider_deleter", "password": "password123"})
+        outsider_headers = self._auth_headers_for(client, "outsider_deleter")
+
+        response = client.delete(f"/games/{game_id}", headers=outsider_headers)
+
+        assert response.status_code == 403
+        assert response.get_json()["error"] == "Only game creator can perform this action"

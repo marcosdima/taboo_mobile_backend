@@ -5,6 +5,9 @@ from .plays import PlaysService
 from .groups import GroupsService
 
 class GameService:
+    MIN_PLAYERS_TO_START = 2
+
+
     def create_game(self, data):
         creator_id = data.get(Game.CREATOR)
 

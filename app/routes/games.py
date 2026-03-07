@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, g
 from app.services import GameService, PlaysService
-from app.middlewares import token_required
+from app.middlewares import token_required, creator_required
 
 
 game_bp = Blueprint('game', __name__)
@@ -21,7 +21,7 @@ def create_game():
 
 
 @game_bp.route('/games/<int:game_id>', methods=['PUT'])
-@token_required
+@creator_required
 def update_game(game_id):
     data = request.json
     game = service.update_game(game_id, data)
@@ -29,8 +29,9 @@ def update_game(game_id):
 
 
 @game_bp.route('/games/<int:game_id>', methods=['DELETE'])
-@token_required
+@creator_required
 def delete_game(game_id):
+    # TODO: Only allow deletion if game did not start yet.
     service.delete_game(game_id)
     return jsonify({"message": "Game deleted"}), 204
 
