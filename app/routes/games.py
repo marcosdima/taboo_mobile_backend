@@ -65,8 +65,9 @@ def start_game():
     if game["creator"] != g.current_user.id:
         return jsonify({"error": "Only game creator can start the game"}), 403
 
-    try:
-        started_game = service.start_game(game["id"])
-        return jsonify(started_game), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    players_in_game = len(plays_service.get_plays_by_game(game["id"]))
+    if players_in_game < service.MIN_PLAYERS_TO_START:
+        return jsonify({"error": f"Cannot start game with less than {service.MIN_PLAYERS_TO_START} players"}), 400
+
+    started_game = service.start_game(game["id"])
+    return jsonify(started_game), 200

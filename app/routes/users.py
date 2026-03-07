@@ -10,13 +10,18 @@ service = UserService()
 
 @users_bp.route('/users', methods=['POST'])
 def create_user():
-    data = request.json
+    data = request.json or {}
+    alias = data.get("alias")
+    password = data.get("password")
 
-    try:
-        user = service.create_user(data)
-        return jsonify(user), 201
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    if not alias or not password:
+        return jsonify({"error": "Alias and password required"}), 400
+
+    if service.get_user_by_alias(alias):
+        return jsonify({"error": "Alias already exists"}), 400
+
+    user = service.create_user(data)
+    return jsonify(user), 201
 
 
 @users_bp.route('/users/<int:user_id>', methods=['GET'])

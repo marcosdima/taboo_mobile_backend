@@ -6,6 +6,7 @@ from .groups import GroupsService
 
 class GameService:
     MIN_PLAYERS_TO_START = 2
+    MAX_PLAYS_PER_GAME = Game.MAX_PLAYS_PER_GAME
 
 
     def get_game_by_id(self, game_id):
@@ -15,9 +16,6 @@ class GameService:
 
     def create_game(self, data):
         creator_id = data.get(Game.CREATOR)
-
-        if not creator_id:
-            raise ValueError("Creator ID is required")
         
         new_game = Game(**data)
         db.session.add(new_game)
@@ -75,15 +73,5 @@ class GameService:
 
 
     def start_game(self, game_id):
-        game = db.session.get(Game, game_id)
-        if not game or game.ended_at is not None:
-            raise ValueError("Game does not exist or is not active")
-
-        # Check if the minimum player requirement is met before starting the game.
-        plays = PlaysService()
-        players_in_game = len(plays.get_plays_by_game(game_id))
-        if players_in_game < self.MIN_PLAYERS_TO_START:
-            raise ValueError(f"Cannot start game with less than {self.MIN_PLAYERS_TO_START} players")
-        
         return self.update_game(game_id, {Game.STARTED_AT: datetime.now()})
     

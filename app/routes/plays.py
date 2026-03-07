@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify, g
-from app.services import PlaysService
+from app.services import PlaysService, GameService
 from app.middlewares import token_required
 
 plays_bp = Blueprint('plays', __name__)
 service = PlaysService()
+game_service = GameService()
 
 
 @plays_bp.route('/play', methods=['POST'])
@@ -11,15 +12,26 @@ service = PlaysService()
 def add_play():
     """Add a user to a game (create a play record)"""
     data = request.json or {}
+    game_id = data.get("game_id")
 
-    try:
-        play = service.add_play({
-            "user_id": g.current_user.id,
-            "game_id": data.get("game_id")
-        })
-        return jsonify(play), 201
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    if not game_id:
+        return jsonify({"error": "User ID and Game ID are required"}), 400
+
+    game = game_service.get_game_by_id(game_id)
+    if not game or game["ended_at"] is not None:
+        return jsonify({"error": "Game does not exist or is not active"}), 400
+
+    if service.get_play(g.current_user.id, game_id):
+        return jsonify({"error": "User already playing in this game"}), 400
+
+    if service.count_plays_by_game(game_id) >= game_service.MAX_PLAYS_PER_GAME:
+        return jsonify({"error": f"Game already has maximum of {game_service.MAX_PLAYS_PER_GAME} plays"}), 400
+
+    play = service.add_play({
+        "user_id": g.current_user.id,
+        "game_id": game_id
+    })
+    return jsonify(play), 201
 
 
 @plays_bp.route('/leave', methods=['DELETE'])

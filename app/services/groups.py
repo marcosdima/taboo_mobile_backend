@@ -11,6 +11,21 @@ class GroupsService:
         ).first()
 
 
+    def get_group_by_id(self, group_id):
+        group = db.session.get(Group, group_id)
+        return group.to_dict() if group else None
+
+
+    def get_active_play_by_user_and_game(self, user_id, game_id):
+        play = self._get_active_play(user_id, game_id)
+        return play.to_dict() if play else None
+
+
+    def get_member_by_play_id(self, play_id):
+        member = Member.query.filter_by(play_id=play_id).first()
+        return member.to_dict() if member else None
+
+
     def create_default_groups(self, game_id):
         existing_names = {
             group.name
@@ -30,24 +45,8 @@ class GroupsService:
 
 
     def assign_user_to_group(self, requester_id, user_id, group_id):
-        if not user_id or not group_id:
-            raise ValueError("user_id and group_id are required")
-
         group = db.session.get(Group, group_id)
-        if not group:
-            raise LookupError("Group not found")
-
-        requester_play = self._get_active_play(requester_id, group.game_id)
-        if not requester_play:
-            raise PermissionError("Only players in this game can assign groups")
-
         target_play = self._get_active_play(user_id, group.game_id)
-        if not target_play:
-            raise ValueError("User must be playing in this game")
-
-        existing_member = Member.query.filter_by(play_id=target_play.id).first()
-        if existing_member:
-            raise ValueError("User already assigned in this game. Use PUT to update")
 
         member = Member(play_id=target_play.id, group_id=group.id)
         db.session.add(member)
@@ -57,27 +56,9 @@ class GroupsService:
 
 
     def reassign_user_group(self, requester_id, user_id, group_id):
-        if not user_id or not group_id:
-            raise ValueError("user_id and group_id are required")
-
         group = db.session.get(Group, group_id)
-        if not group:
-            raise LookupError("Group not found")
-
-        game = db.session.get(Game, group.game_id)
-        if not game or game.ended_at is not None:
-            raise ValueError("Game does not exist or is not active")
-
-        if requester_id != game.creator:
-            raise PermissionError("Only game creator can reassign groups")
-
         target_play = self._get_active_play(user_id, group.game_id)
-        if not target_play:
-            raise ValueError("User must be playing in this game")
-
         member = Member.query.filter_by(play_id=target_play.id).first()
-        if not member:
-            raise LookupError("User has no group assignment in this game")
 
         member.group_id = group.id
         db.session.commit()
@@ -86,10 +67,6 @@ class GroupsService:
 
 
     def get_groups_by_game(self, game_id):
-        game = db.session.get(Game, game_id)
-        if not game:
-            raise LookupError("Game not found")
-
         groups = Group.query.filter_by(game_id=game_id).all()
         result = []
 

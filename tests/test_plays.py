@@ -82,7 +82,7 @@ class TestPlaysService:
 
     
     def test_add_play_duplicate_fails(self, app_context):
-        """Test that same user cannot play twice in same game (constraint violation)."""
+        """Service assumes validated input; duplicate protection is enforced by DB."""
         user1 = create_user("user1", "password123")
         user2 = create_user("user2", "password123")
         game = create_game(user1[User.ID])
@@ -93,15 +93,16 @@ class TestPlaysService:
             Plays.GAME_ID: game[Game.ID]
         })
         
-        with pytest.raises(ValueError, match="User already playing in this game"):
+        with pytest.raises(IntegrityError):
             service.add_play({
                 Plays.USER_ID: user2[User.ID],
                 Plays.GAME_ID: game[Game.ID]
             })
+        db.session.rollback()
 
 
     def test_add_play_limit_per_game(self, app_context):
-        """Test that a game cannot have more than 10 plays."""
+        """Service assumes route checks; route enforces max players before calling service."""
         creator = create_user("creator_limit", "password123")
         game = create_game(creator[User.ID])
 
@@ -118,26 +119,30 @@ class TestPlaysService:
         plays = service.get_plays_by_game(game[Game.ID])
         assert len(plays) == 10
 
-        # The 11th player must fail.
+        # Service accepts trusted data; max-size validation is handled by route layer.
         extra_user = create_user("limit_user_11", "password123")
-        with pytest.raises(ValueError, match="Game already has maximum of 10 plays"):
-            service.add_play({
-                Plays.USER_ID: extra_user[User.ID],
-                Plays.GAME_ID: game[Game.ID]
-            })
+        service.add_play({
+            Plays.USER_ID: extra_user[User.ID],
+            Plays.GAME_ID: game[Game.ID]
+        })
+
+        plays = service.get_plays_by_game(game[Game.ID])
+        assert len(plays) == 11
 
 
     def test_add_play_missing_data(self, app_context):
-        """Test play addition with missing required data."""
+        """Service assumes validated data; invalid payloads fail at DB layer."""
         service = PlaysService()
         
         # Missing user_id
-        with pytest.raises(ValueError, match="User ID and Game ID are required"):
+        with pytest.raises(IntegrityError):
             service.add_play({Plays.GAME_ID: 1})
+        db.session.rollback()
         
         # Missing game_id
-        with pytest.raises(ValueError, match="User ID and Game ID are required"):
+        with pytest.raises(IntegrityError):
             service.add_play({Plays.USER_ID: 1})
+        db.session.rollback()
 
     
     def test_delete_play_success(self, app_context):
@@ -314,6 +319,13 @@ class TestPlaysRoutes:
         
         assert response.status_code == 201
         assert response.get_json()[Plays.USER_ID] == user2_data[User.ID]
+
+
+    def test_add_play_route_missing_game_id(self, client):
+        response = client.post("/play", json={})
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "User ID and Game ID are required"
 
     
     def test_add_play_route_when_already_playing(self, client):

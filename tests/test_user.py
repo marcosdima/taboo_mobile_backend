@@ -29,12 +29,17 @@ class TestUserService:
         assert result[User.ID] == 1
 
     
-    def test_create_user_duplicate_alias(self, app_context, user_data):
-        """ Test user creation with duplicate alias. """
+    def test_get_user_by_alias(self, app_context, user_data):
+        """ Test alias lookup helper used by route validation. """
         service = UserService()
-        service.create_user(user_data)
-        with pytest.raises(ValueError, match="Alias already exists"):
-            service.create_user(user_data)
+        created = service.create_user(user_data)
+
+        found = service.get_user_by_alias(user_data[User.ALIAS])
+        missing = service.get_user_by_alias("unknown_alias")
+
+        assert found is not None
+        assert found[User.ID] == created[User.ID]
+        assert missing is None
 
     
     def test_exists_user(self, app_context, user_data):
@@ -62,6 +67,15 @@ class TestUserRoutes:
         response = client.post("/users", json={})
         assert response.status_code == 400
         assert response.get_json()["error"] == "Alias and password required"
+
+
+    def test_create_user_route_duplicate_alias(self, client, user_data):
+        first = client.post("/users", json=user_data)
+        assert first.status_code == 201
+
+        duplicate = client.post("/users", json=user_data)
+        assert duplicate.status_code == 400
+        assert duplicate.get_json()["error"] == "Alias already exists"
     
 
     def test_get_users_route(self, client, user_data):

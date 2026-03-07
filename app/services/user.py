@@ -10,12 +10,6 @@ class UserService:
         alias = data.get("alias")
         password = data.get("password")
 
-        if not alias or not password:
-            raise ValueError("Alias and password required")
-
-        if User.query.filter_by(alias=alias).first():
-            raise ValueError("Alias already exists")
-
         user = User(alias=alias)
         user.set_password(password)
 
@@ -23,6 +17,11 @@ class UserService:
         db.session.commit()
 
         return user.to_dict()
+
+
+    def get_user_by_alias(self, alias):
+        user = User.query.filter_by(alias=alias).first()
+        return user.to_dict() if user else None
 
 
     def get_user(self, user_id):
